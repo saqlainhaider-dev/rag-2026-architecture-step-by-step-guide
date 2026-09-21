@@ -77,8 +77,13 @@ def clear_bm25_cache() -> None:
     _load_index.cache_clear()
 
 
-def search_bm25(query: str, k: int = 5) -> list[tuple[dict, float]]:
-    """Return top-k (record, bm25_score) pairs."""
+def search_bm25(
+    query: str,
+    k: int = 5,
+    *,
+    access_filter: str | None = None,
+) -> list[tuple[dict, float]]:
+    """Return top-k (record, bm25_score) pairs, optionally filtered by access."""
     bm25, records = _load_index()
     scores = bm25.get_scores(tokenize(query))
     ranked = sorted(
@@ -86,4 +91,14 @@ def search_bm25(query: str, k: int = 5) -> list[tuple[dict, float]]:
         key=lambda item: item[1],
         reverse=True,
     )
-    return [(rec, float(score)) for rec, score in ranked[:k] if score > 0]
+    results: list[tuple[dict, float]] = []
+    for rec, score in ranked:
+        if score <= 0:
+            continue
+        if access_filter and access_filter != "any":
+            if str(rec.get("access", "")) != access_filter:
+                continue
+        results.append((rec, float(score)))
+        if len(results) >= k:
+            break
+    return results

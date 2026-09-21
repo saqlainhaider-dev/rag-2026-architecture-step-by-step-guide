@@ -6,6 +6,8 @@ Build a production-shaped RAG system one layer at a time. Each git commit is one
 
 **Reranker choice:** [docs/RERANKER.md](docs/RERANKER.md) — local cross-encoder (no Cohere/Voyage key required).
 
+**Orchestration:** [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) — classify / rewrite / route before retrieve.
+
 ## Steps
 
 | Step | Status | What you get |
@@ -14,8 +16,8 @@ Build a production-shaped RAG system one layer at a time. Each git commit is one
 | **2. Baseline RAG** | Done | Retrieve → LLM answer + citations |
 | **3. Hybrid retrieval + fusion** | Done | BM25 + dense + RRF |
 | **4. Reranking** | Done | Local cross-encoder (`bge-reranker-base`) |
-| 5. Query orchestration | Next | Rewrite / route |
-| 6. Context engineering | Planned | Parent chunks / compression |
+| **5. Query orchestration** | Done | Classify / rewrite / route / light decompose |
+| 6. Context engineering | Next | Parent chunks / compression |
 | 7. Guardrails | Planned | Grounding / ACL / injection |
 | 8. Eval + observability | Planned | Golden set / traces / cost |
 
@@ -76,23 +78,38 @@ python -m rag.answer "What is SEV-1?"                        # rerank on by defa
 python -m rag.answer "What is SEV-1?" --no-rerank            # A/B without rerank
 ```
 
+## Step 5 — query orchestration
+
+Classify / rewrite / route before retrieval. Details: [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md).
+
+```bash
+python -m rag.orchestrate "hi"
+python -m rag.orchestrate "how long till i get my money back on software?"
+python -m rag.answer "hi"                                   # no retrieval
+python -m rag.answer "how long till i get my money back on software?"
+python -m rag.answer "What is SEV-1 and how do I rollback with acmectl?"
+python -m rag.answer "hi" --no-orchestrate                   # A/B
+```
+
 Qdrant dashboard: http://localhost:6333/dashboard
 
 ## Layout
 
 ```text
-data/acme/           # source markdown corpus
-docs/RERANKER.md     # why local cross-encoder vs Cohere/Voyage
-rag/ingest.py        # chunk + embed + upsert + BM25 corpus
-rag/bm25_index.py    # sparse keyword index
-rag/fusion.py        # Reciprocal Rank Fusion
-rag/rerank.py        # local cross-encoder
-rag/retrieve.py      # dense / bm25 / hybrid / +rerank
-rag/smoke_test.py    # retrieval check (+ --compare)
-rag/answer.py        # retrieve → LLM → citations
-rag/types.py         # RetrievedChunk
-rag/config.py        # models, RRF_K, RERANK_*
-docker-compose.yml   # Qdrant server
+data/acme/             # source markdown corpus
+docs/RERANKER.md       # why local cross-encoder vs Cohere/Voyage
+docs/ORCHESTRATION.md  # query planning layer
+rag/ingest.py          # chunk + embed + upsert + BM25 corpus
+rag/bm25_index.py      # sparse keyword index
+rag/fusion.py          # Reciprocal Rank Fusion
+rag/rerank.py          # local cross-encoder
+rag/orchestrate.py     # classify / rewrite / route
+rag/retrieve.py        # dense / bm25 / hybrid / +rerank / filters
+rag/smoke_test.py      # retrieval check (+ --compare)
+rag/answer.py          # orchestrate → retrieve → LLM
+rag/types.py           # RetrievedChunk
+rag/config.py          # models, RRF_K, RERANK_*, ORCHESTRATE
+docker-compose.yml     # Qdrant server
 ```
 
 ## Commit convention

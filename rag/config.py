@@ -25,6 +25,9 @@ RERANK_CANDIDATES = 10  # fuse this many, then rerank down to final k
 RERANK_BATCH_SIZE = 8
 DEFAULT_RERANK = True
 
+# Step 5 — query orchestration (classify / rewrite / route)
+DEFAULT_ORCHESTRATE = True
+
 
 def get_qdrant_client() -> QdrantClient:
     """Connect to Qdrant running in Docker (see docker-compose.yml)."""
