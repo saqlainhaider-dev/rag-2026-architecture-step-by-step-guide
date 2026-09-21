@@ -15,6 +15,9 @@ env/
 indexes/
 *.qdrant
 
+# Observability
+logs/
+
 # OS / IDE
 .DS_Store
 .idea/

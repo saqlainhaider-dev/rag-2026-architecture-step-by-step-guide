@@ -1,5 +1,5 @@
 """
-RAG answer path: orchestrate → retrieve → context → guards → LLM.
+RAG answer path: orchestrate → retrieve → context → guards → LLM (+ traces).
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from rag.config import (
     DEFAULT_RERANK,
     DEFAULT_RETRIEVAL_MODE,
     DEFAULT_ROLE,
+    DEFAULT_TRACE,
 )
 from rag.context import ContextBlock, build_context, format_context_blocks
 from rag.guardrails import (
@@ -32,6 +33,7 @@ from rag.guardrails import (
     resolve_access_filter,
     scan_injection,
 )
+from rag.observe import new_trace, timed, write_trace
 from rag.orchestrate import RetrievalPlan, orchestrate, search_queries_for_plan
 from rag.retrieve import RetrievedChunk, RetrievalMode, retrieve, retrieve_many
 
@@ -77,25 +79,166 @@ def answer_question(
     max_chars: int = CONTEXT_MAX_CHARS,
     role: UserRole = DEFAULT_ROLE,
     guards: bool | None = None,
+    trace: bool | None = None,
 ) -> tuple[str, list[RetrievedChunk], RetrievalPlan | None, list[ContextBlock]]:
     use_orch = DEFAULT_ORCHESTRATE if orchestrate_query is None else orchestrate_query
     use_expand = DEFAULT_EXPAND_PARENTS if expand_parents is None else expand_parents
     use_compress = DEFAULT_COMPRESS_CONTEXT if compress is None else compress
     use_guards = DEFAULT_GUARDS if guards is None else guards
+    use_trace = DEFAULT_TRACE if trace is None else trace
+    use_rerank = DEFAULT_RERANK if rerank is None else rerank
+
     plan: RetrievalPlan | None = None
-    injection_hits: list[str] = []
+    chunks: list[RetrievedChunk] = []
+    blocks: list[ContextBlock] = []
+    content = ""
+    grounding_meta: dict | None = None
 
-    if use_guards:
-        injection_hits = scan_injection(question)
+    req = new_trace(
+        question,
+        role=role,
+        mode=mode,
+        orchestrate=use_orch,
+        rerank=use_rerank,
+        expand_parents=use_expand,
+        compress=use_compress,
+        guards=use_guards,
+        k=k,
+    )
 
-    if use_orch:
-        plan = orchestrate(question)
-        if not plan.should_retrieve:
+    try:
+        if use_guards:
+            with timed(req, "injection_scan"):
+                hits = scan_injection(question)
+            req.flags["injection_hits"] = hits
+
+        if use_orch:
+            with timed(req, "orchestrate"):
+                plan = orchestrate(question)
+            if plan is not None:
+                req.plan = plan.model_dump()
+
+            if plan is not None and not plan.should_retrieve:
+                with timed(req, "llm_chitchat"):
+                    llm = ChatOpenAI(model=CHAT_MODEL, temperature=0)
+                    response = llm.invoke(
+                        [
+                            {"role": "system", "content": CHITCHAT_SYSTEM},
+                            {"role": "user", "content": question},
+                        ]
+                    )
+                    content = (
+                        response.content
+                        if isinstance(response.content, str)
+                        else str(response.content)
+                    )
+                req.answer_preview = content[:500]
+                if use_trace:
+                    write_trace(req)
+                return content, [], plan, []
+
+            access = (
+                resolve_access_filter(role, plan.access_filter if plan else "any")
+                if use_guards
+                else (plan.access_filter if plan else "any")
+            )
+            req.flags["access_filter"] = access
+            queries = search_queries_for_plan(plan, question) if plan else [question]
+            with timed(req, "retrieve"):
+                chunks = retrieve_many(
+                    queries,
+                    k=k,
+                    mode=mode,
+                    rerank=use_rerank,
+                    access_filter=access,
+                    rerank_query=question,
+                )
+        else:
+            access = resolve_access_filter(role, "any") if use_guards else None
+            req.flags["access_filter"] = access
+            with timed(req, "retrieve"):
+                chunks = retrieve(
+                    question,
+                    k=k,
+                    mode=mode,
+                    rerank=use_rerank,
+                    access_filter=access,
+                )
+
+        if use_guards:
+            with timed(req, "acl_filter_chunks"):
+                chunks = filter_chunks_for_role(chunks, role)
+
+        req.retrieved = [
+            {
+                "doc_id": c.doc_id,
+                "section": c.section,
+                "access": c.access,
+                "score": round(c.score, 4),
+            }
+            for c in chunks
+        ]
+
+        if not chunks:
+            content = "I don't know — no documents were retrieved."
+            if use_guards and role == "public":
+                content = (
+                    "I don't know based on documents available for your role "
+                    "(public). Internal runbooks are not visible."
+                )
+            req.answer_preview = content
+            if use_trace:
+                write_trace(req)
+            return content, [], plan, []
+
+        with timed(req, "context"):
+            blocks = build_context(
+                chunks,
+                question=question,
+                expand_parents=use_expand,
+                max_chars=max_chars,
+                compress=use_compress,
+            )
+            if use_guards:
+                blocks = filter_blocks_for_role(blocks, role)
+
+        req.context = [
+            {
+                "doc_id": b.doc_id,
+                "section": b.section,
+                "access": b.access,
+                "expanded": b.expanded,
+                "chars": len(b.text),
+            }
+            for b in blocks
+        ]
+
+        if not blocks:
+            content = (
+                "I don't know — no permitted context remained after access checks."
+            )
+            req.answer_preview = content
+            if use_trace:
+                write_trace(req)
+            return content, chunks, plan, []
+
+        system = GROUNDED_SYSTEM_PROMPT if use_guards else SYSTEM_PROMPT
+        if use_guards:
+            user = build_guarded_user_prompt(question, blocks)
+        else:
+            user = (
+                f"Question: {question}\n\n"
+                f"Context:\n{format_context_blocks(blocks)}\n\n"
+                "Answer with inline citations like [1] where appropriate."
+            )
+        req.totals["prompt_chars"] = len(system) + len(user)
+
+        with timed(req, "llm_generate"):
             llm = ChatOpenAI(model=CHAT_MODEL, temperature=0)
             response = llm.invoke(
                 [
-                    {"role": "system", "content": CHITCHAT_SYSTEM},
-                    {"role": "user", "content": question},
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
                 ]
             )
             content = (
@@ -103,86 +246,26 @@ def answer_question(
                 if isinstance(response.content, str)
                 else str(response.content)
             )
-            return content, [], plan, []
 
-        access = (
-            resolve_access_filter(role, plan.access_filter)
-            if use_guards
-            else plan.access_filter
-        )
-        queries = search_queries_for_plan(plan, question)
-        chunks = retrieve_many(
-            queries,
-            k=k,
-            mode=mode,
-            rerank=rerank,
-            access_filter=access,
-            rerank_query=question,
-        )
-    else:
-        access = resolve_access_filter(role, "any") if use_guards else None
-        chunks = retrieve(
-            question, k=k, mode=mode, rerank=rerank, access_filter=access
-        )
+        if use_guards:
+            with timed(req, "grounding"):
+                ok, reason = check_grounding(content, blocks)
+                grounding_meta = {"ok": ok, "reason": reason}
+                if not ok:
+                    content = grounding_refusal(reason)
+            req.grounding = grounding_meta
 
-    if use_guards:
-        chunks = filter_chunks_for_role(chunks, role)
+        req.answer_preview = content[:500]
+        if use_trace:
+            path = write_trace(req)
+            req.flags["trace_path"] = str(path)
+        return content, chunks, plan, blocks
 
-    if not chunks:
-        msg = "I don't know — no documents were retrieved."
-        if use_guards and role == "public":
-            msg = (
-                "I don't know based on documents available for your role "
-                "(public). Internal runbooks are not visible."
-            )
-        return msg, [], plan, []
-
-    blocks = build_context(
-        chunks,
-        question=question,
-        expand_parents=use_expand,
-        max_chars=max_chars,
-        compress=use_compress,
-    )
-    if use_guards:
-        blocks = filter_blocks_for_role(blocks, role)
-
-    if not blocks:
-        return (
-            "I don't know — no permitted context remained after access checks.",
-            chunks,
-            plan,
-            [],
-        )
-
-    system = GROUNDED_SYSTEM_PROMPT if use_guards else SYSTEM_PROMPT
-    if use_guards:
-        user = build_guarded_user_prompt(question, blocks)
-    else:
-        user = (
-            f"Question: {question}\n\n"
-            f"Context:\n{format_context_blocks(blocks)}\n\n"
-            "Answer with inline citations like [1] where appropriate."
-        )
-
-    llm = ChatOpenAI(model=CHAT_MODEL, temperature=0)
-    response = llm.invoke(
-        [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ]
-    )
-    content = response.content if isinstance(response.content, str) else str(response.content)
-
-    if use_guards:
-        ok, reason = check_grounding(content, blocks)
-        if not ok:
-            content = grounding_refusal(reason)
-
-    # Attach injection note for CLI visibility via a side channel: prepend is noisy;
-    # callers that care can re-scan. We stash nothing; main() re-scans for print.
-    _ = injection_hits
-    return content, chunks, plan, blocks
+    except Exception as exc:
+        req.error = str(exc)
+        if use_trace:
+            write_trace(req)
+        raise
 
 
 def main() -> None:
@@ -243,6 +326,12 @@ def main() -> None:
         default=DEFAULT_GUARDS,
         help="ACL + injection hardening + grounding (default: on)",
     )
+    parser.add_argument(
+        "--trace",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_TRACE,
+        help="Append JSONL observability trace (default: on)",
+    )
     args = parser.parse_args()
 
     mode: RetrievalMode = args.mode  # type: ignore[assignment]
@@ -258,13 +347,15 @@ def main() -> None:
         max_chars=args.max_chars,
         role=role,
         guards=args.guards,
+        trace=args.trace,
     )
 
     print(f"Question: {args.question}")
     print(
         f"Mode: {mode}  role={role}  guards={args.guards}  "
         f"rerank={args.rerank}  orchestrate={args.orchestrate}  "
-        f"expand_parents={args.expand_parents}  compress={args.compress}\n"
+        f"expand_parents={args.expand_parents}  compress={args.compress}  "
+        f"trace={args.trace}\n"
     )
     if args.guards:
         hits = scan_injection(args.question)
@@ -302,6 +393,10 @@ def main() -> None:
         if args.guards:
             ok, reason = check_grounding(text, blocks)
             print(f"\nGrounding: {'pass' if ok else 'fail'} ({reason})")
+    if args.trace:
+        from rag.config import TRACE_LOG_PATH
+
+        print(f"\nTrace appended → {TRACE_LOG_PATH}")
 
 
 if __name__ == "__main__":

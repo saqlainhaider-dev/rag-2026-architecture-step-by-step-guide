@@ -48,7 +48,8 @@ ORCHESTRATOR_SYSTEM = """You plan retrieval for Acme's internal knowledge assist
 Corpus covers: refund/billing policy, product FAQ (plans, SSO, API), on-call runbooks (SEV, rollback).
 
 Rules:
-- Greets, thanks, small talk → should_retrieve=false, access_filter=any, rewritten_query can echo the message.
+- Greets, thanks, small talk ONLY (hi/thanks/how are you) → should_retrieve=false, access_filter=any, rewritten_query can echo the message.
+- Specific factual questions about Acme (even if the answer may be unknown) → should_retrieve=true so grounding can abstain from docs.
 - On-call / SEV / PagerDuty / rollback / incident → intent=oncall, access_filter=internal.
 - Refunds / billing / money back → intent=billing, access_filter=public.
 - Plans / SSO / API / pricing / export → intent=product, access_filter=public.

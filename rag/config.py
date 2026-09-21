@@ -38,6 +38,11 @@ DEFAULT_COMPRESS_CONTEXT = False
 DEFAULT_GUARDS = True
 DEFAULT_ROLE = "internal"  # simulated API caller; use --role public to demo ACL
 
+# Step 8 — eval + observability (see docs/EVAL.md)
+GOLDEN_SET_PATH = ROOT / "evals" / "golden.json"
+TRACE_LOG_PATH = ROOT / "logs" / "traces.jsonl"
+DEFAULT_TRACE = True
+
 
 def get_qdrant_client() -> QdrantClient:
     """Connect to Qdrant running in Docker (see docker-compose.yml)."""

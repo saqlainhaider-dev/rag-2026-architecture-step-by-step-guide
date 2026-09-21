@@ -1,0 +1,54 @@
+[
+  {
+    "id": "refund_window",
+    "question": "How long do I have to request a software refund?",
+    "role": "public",
+    "expect_retrieve": true,
+    "expect_doc_id": "refund_policy",
+    "expect_section_contains": "Eligibility",
+    "expect_answer_contains_any": ["30"],
+    "expect_abstain": false
+  },
+  {
+    "id": "sso_pro",
+    "question": "Does the Pro plan include SSO?",
+    "role": "public",
+    "expect_retrieve": true,
+    "expect_doc_id": "product_faq",
+    "expect_section_contains": "SSO",
+    "expect_answer_contains_any": ["Enterprise"],
+    "expect_abstain": false
+  },
+  {
+    "id": "sev1_public_acl",
+    "question": "What is SEV-1?",
+    "role": "public",
+    "expect_retrieve": true,
+    "forbid_doc_id": "oncall_runbook",
+    "expect_abstain": true
+  },
+  {
+    "id": "sev1_internal",
+    "question": "What is SEV-1?",
+    "role": "internal",
+    "expect_retrieve": true,
+    "expect_doc_id": "oncall_runbook",
+    "expect_section_contains": "Severity",
+    "expect_answer_contains_any": ["outage", "data-loss", "data loss"],
+    "expect_abstain": false
+  },
+  {
+    "id": "chitchat_hi",
+    "question": "hi",
+    "role": "public",
+    "expect_retrieve": false,
+    "expect_abstain": false
+  },
+  {
+    "id": "unknown_coffee",
+    "question": "What is Acme's office coffee brand?",
+    "role": "public",
+    "expect_abstain": true,
+    "forbid_confident_invention": true
+  }
+]
