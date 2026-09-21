@@ -8,9 +8,9 @@ Build a production-shaped RAG system one layer at a time. Each git commit is one
 
 | Step | Status | What you get |
 |------|--------|--------------|
-| **1. Ingestion & Indexing** | Done (this commit) | Docs → chunks → embeddings → Qdrant |
-| 2. Baseline RAG | Next | Retrieve → LLM answer + citations |
-| 3. Hybrid retrieval + fusion | Planned | BM25 + dense + RRF |
+| **1. Ingestion & Indexing** | Done | Docs → chunks → embeddings → Qdrant |
+| **2. Baseline RAG** | Done | Retrieve → LLM answer + citations |
+| 3. Hybrid retrieval + fusion | Next | BM25 + dense + RRF |
 | 4. Reranking | Planned | Cross-encoder / reranker |
 | 5. Query orchestration | Planned | Rewrite / route |
 | 6. Context engineering | Planned | Parent chunks / compression |
@@ -38,11 +38,19 @@ cp .env.example .env   # add your OPENAI_API_KEY
 docker compose up -d   # Qdrant on localhost:6333
 ```
 
-## Step 1 — run it
+## Step 1 — ingest + retrieval check
 
 ```bash
 python -m rag.ingest
 python -m rag.smoke_test "Does Pro plan include SSO?"
+```
+
+## Step 2 — baseline RAG answer
+
+```bash
+python -m rag.answer "Does the Pro plan include SSO?"
+python -m rag.answer "How long do I have to request a software refund?"
+python -m rag.answer "What is Acme's office coffee brand?"   # expect don't-know
 ```
 
 Qdrant dashboard: http://localhost:6333/dashboard
@@ -52,8 +60,10 @@ Qdrant dashboard: http://localhost:6333/dashboard
 ```text
 data/acme/           # source markdown corpus
 rag/ingest.py        # chunk + embed + upsert
-rag/smoke_test.py    # dense retrieval check (no LLM answer yet)
-rag/config.py        # Qdrant URL, collection, embedding model
+rag/retrieve.py      # shared dense search
+rag/smoke_test.py    # retrieval-only check
+rag/answer.py        # retrieve → LLM → citations
+rag/config.py        # Qdrant URL, models, collection
 docker-compose.yml   # Qdrant server
 ```
 
