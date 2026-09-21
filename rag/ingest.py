@@ -17,6 +17,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
+from rag.bm25_index import clear_bm25_cache, save_bm25_corpus
 from rag.config import (
     COLLECTION_NAME,
     EMBEDDING_MODEL,
@@ -152,6 +153,18 @@ def build_index(docs: list[Document] | None = None) -> int:
     client.upsert(collection_name=COLLECTION_NAME, points=points)
     count = client.count(collection_name=COLLECTION_NAME, exact=True).count
     client.close()
+
+    # Same chunks for BM25 so hybrid fusion compares identical units
+    bm25_records = [
+        {
+            "text": d.page_content,
+            **d.metadata,
+        }
+        for d in docs
+    ]
+    bm25_path = save_bm25_corpus(bm25_records)
+    clear_bm25_cache()
+    print(f"Wrote BM25 corpus ({len(bm25_records)} chunks) → {bm25_path}")
     return count
 
 
@@ -166,7 +179,7 @@ def main() -> None:
 
     count = build_index(docs)
     print(f"\nIndexed {count} vectors → Qdrant@{COLLECTION_NAME}")
-    print("Step 1 ingest complete.")
+    print("Ingest complete (dense + BM25).")
 
 
 if __name__ == "__main__":

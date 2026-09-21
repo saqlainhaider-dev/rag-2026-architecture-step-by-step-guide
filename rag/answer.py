@@ -9,8 +9,8 @@ import argparse
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-from rag.config import CHAT_MODEL
-from rag.retrieve import RetrievedChunk, retrieve
+from rag.config import CHAT_MODEL, DEFAULT_RETRIEVAL_MODE
+from rag.retrieve import RetrievedChunk, RetrievalMode, retrieve
 
 load_dotenv()
 
@@ -42,8 +42,12 @@ def build_user_prompt(question: str, chunks: list[RetrievedChunk]) -> str:
     )
 
 
-def answer_question(question: str, k: int = 3) -> tuple[str, list[RetrievedChunk]]:
-    chunks = retrieve(question, k=k)
+def answer_question(
+    question: str,
+    k: int = 3,
+    mode: RetrievalMode = "hybrid",
+) -> tuple[str, list[RetrievedChunk]]:
+    chunks = retrieve(question, k=k, mode=mode)
     if not chunks:
         return "I don't know — no documents were retrieved.", []
 
@@ -58,18 +62,26 @@ def answer_question(question: str, k: int = 3) -> tuple[str, list[RetrievedChunk
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Baseline RAG: retrieve + generate")
+    parser = argparse.ArgumentParser(description="RAG: retrieve + generate")
     parser.add_argument(
         "question",
         nargs="?",
         default="Does the Pro plan include SSO?",
     )
     parser.add_argument("-k", type=int, default=3, help="Number of chunks to retrieve")
+    parser.add_argument(
+        "--mode",
+        choices=["dense", "bm25", "hybrid"],
+        default=DEFAULT_RETRIEVAL_MODE,
+        help="Retrieval mode (default: hybrid)",
+    )
     args = parser.parse_args()
 
-    text, chunks = answer_question(args.question, k=args.k)
+    mode: RetrievalMode = args.mode  # type: ignore[assignment]
+    text, chunks = answer_question(args.question, k=args.k, mode=mode)
 
-    print(f"Question: {args.question}\n")
+    print(f"Question: {args.question}")
+    print(f"Mode: {mode}\n")
     print("Retrieved:")
     for i, chunk in enumerate(chunks, start=1):
         print(f"  [{i}] score={chunk.score:.4f}  {chunk.citation}")

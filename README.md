@@ -10,8 +10,8 @@ Build a production-shaped RAG system one layer at a time. Each git commit is one
 |------|--------|--------------|
 | **1. Ingestion & Indexing** | Done | Docs → chunks → embeddings → Qdrant |
 | **2. Baseline RAG** | Done | Retrieve → LLM answer + citations |
-| 3. Hybrid retrieval + fusion | Next | BM25 + dense + RRF |
-| 4. Reranking | Planned | Cross-encoder / reranker |
+| **3. Hybrid retrieval + fusion** | Done | BM25 + dense + RRF |
+| 4. Reranking | Next | Cross-encoder / reranker |
 | 5. Query orchestration | Planned | Rewrite / route |
 | 6. Context engineering | Planned | Parent chunks / compression |
 | 7. Guardrails | Planned | Grounding / ACL / injection |
@@ -53,17 +53,31 @@ python -m rag.answer "How long do I have to request a software refund?"
 python -m rag.answer "What is Acme's office coffee brand?"   # expect don't-know
 ```
 
+## Step 3 — hybrid retrieval + RRF fusion
+
+Re-ingest (writes BM25 corpus + Qdrant), then compare modes:
+
+```bash
+python -m rag.ingest
+python -m rag.smoke_test "What is SEV-1?" --compare
+python -m rag.answer "What is SEV-1?"              # default mode=hybrid
+python -m rag.answer "What is SEV-1?" --mode dense
+```
+
 Qdrant dashboard: http://localhost:6333/dashboard
 
 ## Layout
 
 ```text
 data/acme/           # source markdown corpus
-rag/ingest.py        # chunk + embed + upsert
-rag/retrieve.py      # shared dense search
-rag/smoke_test.py    # retrieval-only check
+rag/ingest.py        # chunk + embed + upsert + BM25 corpus
+rag/bm25_index.py    # sparse keyword index
+rag/fusion.py        # Reciprocal Rank Fusion
+rag/retrieve.py      # dense / bm25 / hybrid
+rag/smoke_test.py    # retrieval check (+ --compare)
 rag/answer.py        # retrieve → LLM → citations
-rag/config.py        # Qdrant URL, models, collection
+rag/types.py         # RetrievedChunk
+rag/config.py        # Qdrant URL, models, RRF_K
 docker-compose.yml   # Qdrant server
 ```
 
