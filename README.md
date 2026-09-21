@@ -8,6 +8,8 @@ Build a production-shaped RAG system one layer at a time. Each git commit is one
 
 **Orchestration:** [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) — classify / rewrite / route before retrieve.
 
+**Context packing:** [docs/CONTEXT.md](docs/CONTEXT.md) — parent expansion, budget, optional compress.
+
 ## Steps
 
 | Step | Status | What you get |
@@ -17,8 +19,8 @@ Build a production-shaped RAG system one layer at a time. Each git commit is one
 | **3. Hybrid retrieval + fusion** | Done | BM25 + dense + RRF |
 | **4. Reranking** | Done | Local cross-encoder (`bge-reranker-base`) |
 | **5. Query orchestration** | Done | Classify / rewrite / route / light decompose |
-| 6. Context engineering | Next | Parent chunks / compression |
-| 7. Guardrails | Planned | Grounding / ACL / injection |
+| **6. Context engineering** | Done | Parent expansion / budget / optional compress |
+| 7. Guardrails | Next | Grounding / ACL / injection |
 | 8. Eval + observability | Planned | Golden set / traces / cost |
 
 ## Domain
@@ -91,6 +93,17 @@ python -m rag.answer "What is SEV-1 and how do I rollback with acmectl?"
 python -m rag.answer "hi" --no-orchestrate                   # A/B
 ```
 
+## Step 6 — context engineering
+
+Child chunks for search; parent sections in the prompt. Details: [docs/CONTEXT.md](docs/CONTEXT.md).
+
+```bash
+python -m rag.ingest                                          # rebuild children + parents
+python -m rag.answer "How long do I have to request a software refund?" --no-rerank
+python -m rag.answer "..." --no-expand-parents                # A/B: raw children only
+python -m rag.answer "..." --compress --max-chars 800
+```
+
 Qdrant dashboard: http://localhost:6333/dashboard
 
 ## Layout
@@ -99,16 +112,18 @@ Qdrant dashboard: http://localhost:6333/dashboard
 data/acme/             # source markdown corpus
 docs/RERANKER.md       # why local cross-encoder vs Cohere/Voyage
 docs/ORCHESTRATION.md  # query planning layer
-rag/ingest.py          # chunk + embed + upsert + BM25 corpus
+docs/CONTEXT.md        # parent expansion / budget
+rag/ingest.py          # children + parents + BM25 + Qdrant
 rag/bm25_index.py      # sparse keyword index
 rag/fusion.py          # Reciprocal Rank Fusion
 rag/rerank.py          # local cross-encoder
 rag/orchestrate.py     # classify / rewrite / route
+rag/context.py         # expand / budget / compress
 rag/retrieve.py        # dense / bm25 / hybrid / +rerank / filters
 rag/smoke_test.py      # retrieval check (+ --compare)
-rag/answer.py          # orchestrate → retrieve → LLM
+rag/answer.py          # orchestrate → retrieve → context → LLM
 rag/types.py           # RetrievedChunk
-rag/config.py          # models, RRF_K, RERANK_*, ORCHESTRATE
+rag/config.py          # models + feature defaults
 docker-compose.yml     # Qdrant server
 ```
 

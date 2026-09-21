@@ -28,6 +28,12 @@ DEFAULT_RERANK = True
 # Step 5 — query orchestration (classify / rewrite / route)
 DEFAULT_ORCHESTRATE = True
 
+# Step 6 — context engineering (see docs/CONTEXT.md)
+PARENTS_PATH = ROOT / "indexes" / "parents.json"
+CONTEXT_MAX_CHARS = 3500
+DEFAULT_EXPAND_PARENTS = True
+DEFAULT_COMPRESS_CONTEXT = False
+
 
 def get_qdrant_client() -> QdrantClient:
     """Connect to Qdrant running in Docker (see docker-compose.yml)."""

@@ -24,6 +24,7 @@ from rag.config import (
     VECTOR_SIZE,
     get_qdrant_client,
 )
+from rag.context import clear_parents_cache, parent_key, save_parents
 
 load_dotenv()
 
@@ -75,10 +76,14 @@ def split_by_headings(body: str, doc_title: str) -> list[tuple[str, str]]:
 
 
 def chunk_section(section_text: str) -> list[str]:
-    """Further split long sections so embedding units stay focused."""
+    """
+    Split long sections into smaller *child* chunks for retrieval.
+
+    Full section text is stored separately as a *parent* (Step 6 expansion).
+    """
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=80,
+        chunk_size=220,
+        chunk_overlap=40,
         separators=["\n\n", "\n", ". ", " ", ""],
     )
     return splitter.split_text(section_text) or [section_text]
@@ -89,8 +94,11 @@ def chunk_id_to_uuid(chunk_id: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, chunk_id))
 
 
-def load_documents(data_dir: Path = DATA_DIR) -> list[Document]:
+def load_documents(data_dir: Path = DATA_DIR) -> tuple[list[Document], dict[str, dict]]:
+    """Return child Documents plus a parent-section map for context expansion."""
     docs: list[Document] = []
+    parents: dict[str, dict] = {}
+
     for path in sorted(data_dir.glob("*.md")):
         raw = path.read_text(encoding="utf-8")
         meta, body = parse_front_matter(raw)
@@ -98,6 +106,18 @@ def load_documents(data_dir: Path = DATA_DIR) -> list[Document]:
         sections = split_by_headings(body, title)
 
         for section_title, section_text in sections:
+            pid = parent_key(path.stem, section_title)
+            parents[pid] = {
+                "parent_id": pid,
+                "text": section_text,
+                "doc_id": path.stem,
+                "section": section_title,
+                "source": str(path.relative_to(ROOT)),
+                "title": title,
+                "access": meta.get("access", "public"),
+                "owner": meta.get("owner", ""),
+                "last_updated": meta.get("last_updated", ""),
+            }
             for chunk_i, chunk in enumerate(chunk_section(section_text)):
                 chunk_id = hashlib.sha1(
                     f"{path.name}:{section_title}:{chunk_i}:{chunk[:64]}".encode()
@@ -107,6 +127,7 @@ def load_documents(data_dir: Path = DATA_DIR) -> list[Document]:
                         page_content=chunk,
                         metadata={
                             "chunk_id": chunk_id,
+                            "parent_id": pid,
                             "doc_id": path.stem,
                             "source": str(path.relative_to(ROOT)),
                             "title": title,
@@ -118,11 +139,15 @@ def load_documents(data_dir: Path = DATA_DIR) -> list[Document]:
                         },
                     )
                 )
-    return docs
+    return docs, parents
 
 
-def build_index(docs: list[Document] | None = None) -> int:
-    docs = docs if docs is not None else load_documents()
+def build_index(
+    docs: list[Document] | None = None,
+    parents: dict[str, dict] | None = None,
+) -> int:
+    if docs is None or parents is None:
+        docs, parents = load_documents()
     if not docs:
         raise SystemExit(f"No markdown docs found in {DATA_DIR}")
 
@@ -165,21 +190,25 @@ def build_index(docs: list[Document] | None = None) -> int:
     bm25_path = save_bm25_corpus(bm25_records)
     clear_bm25_cache()
     print(f"Wrote BM25 corpus ({len(bm25_records)} chunks) → {bm25_path}")
+
+    save_parents(parents or {})
+    clear_parents_cache()
+    print(f"Wrote {len(parents or {})} parent sections → parents store")
     return count
 
 
 def main() -> None:
-    docs = load_documents()
-    print(f"Loaded {len(docs)} chunks from {DATA_DIR}")
+    docs, parents = load_documents()
+    print(f"Loaded {len(docs)} child chunks / {len(parents)} parents from {DATA_DIR}")
     for d in docs:
         print(
             f"  - {d.metadata['doc_id']} | {d.metadata['section']} "
             f"| access={d.metadata['access']} | {len(d.page_content)} chars"
         )
 
-    count = build_index(docs)
+    count = build_index(docs, parents)
     print(f"\nIndexed {count} vectors → Qdrant@{COLLECTION_NAME}")
-    print("Ingest complete (dense + BM25).")
+    print("Ingest complete (dense + BM25 + parents).")
 
 
 if __name__ == "__main__":
