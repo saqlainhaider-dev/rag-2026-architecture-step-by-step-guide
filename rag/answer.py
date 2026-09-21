@@ -1,5 +1,5 @@
 """
-RAG answer path: orchestrate → retrieve → context engineering → LLM.
+RAG answer path: orchestrate → retrieve → context → guards → LLM.
 """
 
 from __future__ import annotations
@@ -14,11 +14,24 @@ from rag.config import (
     CONTEXT_MAX_CHARS,
     DEFAULT_COMPRESS_CONTEXT,
     DEFAULT_EXPAND_PARENTS,
+    DEFAULT_GUARDS,
     DEFAULT_ORCHESTRATE,
     DEFAULT_RERANK,
     DEFAULT_RETRIEVAL_MODE,
+    DEFAULT_ROLE,
 )
 from rag.context import ContextBlock, build_context, format_context_blocks
+from rag.guardrails import (
+    GROUNDED_SYSTEM_PROMPT,
+    UserRole,
+    build_guarded_user_prompt,
+    check_grounding,
+    filter_blocks_for_role,
+    filter_chunks_for_role,
+    grounding_refusal,
+    resolve_access_filter,
+    scan_injection,
+)
 from rag.orchestrate import RetrievalPlan, orchestrate, search_queries_for_plan
 from rag.retrieve import RetrievedChunk, RetrievalMode, retrieve, retrieve_many
 
@@ -36,14 +49,6 @@ CHITCHAT_SYSTEM = """You are Acme's friendly internal assistant.
 Respond briefly to greetings or small talk. Do not invent company policy.
 Offer to help with product, billing, or on-call questions.
 """
-
-
-def build_user_prompt(question: str, blocks: list[ContextBlock]) -> str:
-    return (
-        f"Question: {question}\n\n"
-        f"Context:\n{format_context_blocks(blocks)}\n\n"
-        "Answer with inline citations like [1] where appropriate."
-    )
 
 
 def _print_plan(plan: RetrievalPlan) -> None:
@@ -70,11 +75,18 @@ def answer_question(
     expand_parents: bool | None = None,
     compress: bool | None = None,
     max_chars: int = CONTEXT_MAX_CHARS,
+    role: UserRole = DEFAULT_ROLE,
+    guards: bool | None = None,
 ) -> tuple[str, list[RetrievedChunk], RetrievalPlan | None, list[ContextBlock]]:
     use_orch = DEFAULT_ORCHESTRATE if orchestrate_query is None else orchestrate_query
     use_expand = DEFAULT_EXPAND_PARENTS if expand_parents is None else expand_parents
     use_compress = DEFAULT_COMPRESS_CONTEXT if compress is None else compress
+    use_guards = DEFAULT_GUARDS if guards is None else guards
     plan: RetrievalPlan | None = None
+    injection_hits: list[str] = []
+
+    if use_guards:
+        injection_hits = scan_injection(question)
 
     if use_orch:
         plan = orchestrate(question)
@@ -93,20 +105,37 @@ def answer_question(
             )
             return content, [], plan, []
 
+        access = (
+            resolve_access_filter(role, plan.access_filter)
+            if use_guards
+            else plan.access_filter
+        )
         queries = search_queries_for_plan(plan, question)
         chunks = retrieve_many(
             queries,
             k=k,
             mode=mode,
             rerank=rerank,
-            access_filter=plan.access_filter,
+            access_filter=access,
             rerank_query=question,
         )
     else:
-        chunks = retrieve(question, k=k, mode=mode, rerank=rerank)
+        access = resolve_access_filter(role, "any") if use_guards else None
+        chunks = retrieve(
+            question, k=k, mode=mode, rerank=rerank, access_filter=access
+        )
+
+    if use_guards:
+        chunks = filter_chunks_for_role(chunks, role)
 
     if not chunks:
-        return "I don't know — no documents were retrieved.", [], plan, []
+        msg = "I don't know — no documents were retrieved."
+        if use_guards and role == "public":
+            msg = (
+                "I don't know based on documents available for your role "
+                "(public). Internal runbooks are not visible."
+            )
+        return msg, [], plan, []
 
     blocks = build_context(
         chunks,
@@ -115,20 +144,50 @@ def answer_question(
         max_chars=max_chars,
         compress=use_compress,
     )
+    if use_guards:
+        blocks = filter_blocks_for_role(blocks, role)
+
+    if not blocks:
+        return (
+            "I don't know — no permitted context remained after access checks.",
+            chunks,
+            plan,
+            [],
+        )
+
+    system = GROUNDED_SYSTEM_PROMPT if use_guards else SYSTEM_PROMPT
+    if use_guards:
+        user = build_guarded_user_prompt(question, blocks)
+    else:
+        user = (
+            f"Question: {question}\n\n"
+            f"Context:\n{format_context_blocks(blocks)}\n\n"
+            "Answer with inline citations like [1] where appropriate."
+        )
 
     llm = ChatOpenAI(model=CHAT_MODEL, temperature=0)
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": build_user_prompt(question, blocks)},
-    ]
-    response = llm.invoke(messages)
+    response = llm.invoke(
+        [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+    )
     content = response.content if isinstance(response.content, str) else str(response.content)
+
+    if use_guards:
+        ok, reason = check_grounding(content, blocks)
+        if not ok:
+            content = grounding_refusal(reason)
+
+    # Attach injection note for CLI visibility via a side channel: prepend is noisy;
+    # callers that care can re-scan. We stash nothing; main() re-scans for print.
+    _ = injection_hits
     return content, chunks, plan, blocks
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="RAG: orchestrate + retrieve + context + generate"
+        description="RAG: orchestrate + retrieve + context + guards + generate"
     )
     parser.add_argument(
         "question",
@@ -172,9 +231,22 @@ def main() -> None:
         default=CONTEXT_MAX_CHARS,
         help=f"Context char budget (default: {CONTEXT_MAX_CHARS})",
     )
+    parser.add_argument(
+        "--role",
+        choices=["public", "internal"],
+        default=DEFAULT_ROLE,
+        help="Simulated caller role for ACL (default: internal)",
+    )
+    parser.add_argument(
+        "--guards",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_GUARDS,
+        help="ACL + injection hardening + grounding (default: on)",
+    )
     args = parser.parse_args()
 
     mode: RetrievalMode = args.mode  # type: ignore[assignment]
+    role: UserRole = args.role  # type: ignore[assignment]
     text, chunks, plan, blocks = answer_question(
         args.question,
         k=args.k,
@@ -184,21 +256,33 @@ def main() -> None:
         expand_parents=args.expand_parents,
         compress=args.compress,
         max_chars=args.max_chars,
+        role=role,
+        guards=args.guards,
     )
 
     print(f"Question: {args.question}")
     print(
-        f"Mode: {mode}  rerank={args.rerank}  orchestrate={args.orchestrate}  "
+        f"Mode: {mode}  role={role}  guards={args.guards}  "
+        f"rerank={args.rerank}  orchestrate={args.orchestrate}  "
         f"expand_parents={args.expand_parents}  compress={args.compress}\n"
     )
+    if args.guards:
+        hits = scan_injection(args.question)
+        if hits:
+            print(f"Guardrail warning: possible injection phrases matched: {hits}\n")
     if plan is not None:
         _print_plan(plan)
+        if args.guards:
+            print(
+                f"Effective access_filter: "
+                f"{resolve_access_filter(role, plan.access_filter)}\n"
+            )
     if chunks:
         print("Retrieved (children):")
         for i, chunk in enumerate(chunks, start=1):
             print(
                 f"  [{i}] score={chunk.score:.4f}  {chunk.citation}  "
-                f"({len(chunk.text)} chars)"
+                f"access={chunk.access}  ({len(chunk.text)} chars)"
             )
         print()
     if blocks:
@@ -206,7 +290,7 @@ def main() -> None:
         for i, block in enumerate(blocks, start=1):
             kind = "parent" if block.expanded else "chunk"
             print(
-                f"  [{i}] {block.citation}  [{kind}]  "
+                f"  [{i}] {block.citation}  [{kind}]  access={block.access}  "
                 f"({len(block.text)} chars)"
             )
         print()
@@ -215,6 +299,9 @@ def main() -> None:
         print("Sources:")
         for i, block in enumerate(blocks, start=1):
             print(f"  [{i}] {block.citation}")
+        if args.guards:
+            ok, reason = check_grounding(text, blocks)
+            print(f"\nGrounding: {'pass' if ok else 'fail'} ({reason})")
 
 
 if __name__ == "__main__":

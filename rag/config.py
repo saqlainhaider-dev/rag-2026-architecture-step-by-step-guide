@@ -34,6 +34,10 @@ CONTEXT_MAX_CHARS = 3500
 DEFAULT_EXPAND_PARENTS = True
 DEFAULT_COMPRESS_CONTEXT = False
 
+# Step 7 — guardrails (see docs/GUARDRAILS.md)
+DEFAULT_GUARDS = True
+DEFAULT_ROLE = "internal"  # simulated API caller; use --role public to demo ACL
+
 
 def get_qdrant_client() -> QdrantClient:
     """Connect to Qdrant running in Docker (see docker-compose.yml)."""
