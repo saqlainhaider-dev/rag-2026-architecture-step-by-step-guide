@@ -1,6 +1,8 @@
 # RAG 2026 Architecture — Step-by-Step Guide
 
-Build a production-shaped RAG system one layer at a time. Each git commit is one step: explain → implement → test → study.
+Build a production-shaped RAG system one layer at a time. Each git commit is one step.
+
+**How we work:** [docs/WORKFLOW.md](docs/WORKFLOW.md) — explain → confirm → implement → test → study guide → commit + push.
 
 ## Steps
 
@@ -57,4 +59,4 @@ docker-compose.yml   # Qdrant server
 
 ## Commit convention
 
-Each step lands as its own commit, e.g. `step 1: ingestion and indexing with Qdrant`.
+See [docs/WORKFLOW.md](docs/WORKFLOW.md). Short form: one curriculum step → one commit (`step N: …`).
