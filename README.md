@@ -4,6 +4,8 @@ Build a production-shaped RAG system one layer at a time. Each git commit is one
 
 **How we work:** [docs/WORKFLOW.md](docs/WORKFLOW.md) — explain → confirm → implement → test → study guide → commit + push.
 
+**Reranker choice:** [docs/RERANKER.md](docs/RERANKER.md) — local cross-encoder (no Cohere/Voyage key required).
+
 ## Steps
 
 | Step | Status | What you get |
@@ -11,8 +13,8 @@ Build a production-shaped RAG system one layer at a time. Each git commit is one
 | **1. Ingestion & Indexing** | Done | Docs → chunks → embeddings → Qdrant |
 | **2. Baseline RAG** | Done | Retrieve → LLM answer + citations |
 | **3. Hybrid retrieval + fusion** | Done | BM25 + dense + RRF |
-| 4. Reranking | Next | Cross-encoder / reranker |
-| 5. Query orchestration | Planned | Rewrite / route |
+| **4. Reranking** | Done | Local cross-encoder (`bge-reranker-base`) |
+| 5. Query orchestration | Next | Rewrite / route |
 | 6. Context engineering | Planned | Parent chunks / compression |
 | 7. Guardrails | Planned | Grounding / ACL / injection |
 | 8. Eval + observability | Planned | Golden set / traces / cost |
@@ -60,8 +62,18 @@ Re-ingest (writes BM25 corpus + Qdrant), then compare modes:
 ```bash
 python -m rag.ingest
 python -m rag.smoke_test "What is SEV-1?" --compare
-python -m rag.answer "What is SEV-1?"              # default mode=hybrid
-python -m rag.answer "What is SEV-1?" --mode dense
+python -m rag.answer "What is SEV-1?" --no-rerank
+python -m rag.answer "What is SEV-1?" --mode dense --no-rerank
+```
+
+## Step 4 — local cross-encoder rerank
+
+Uses `BAAI/bge-reranker-base` on CPU (first run downloads the model). Why local: [docs/RERANKER.md](docs/RERANKER.md).
+
+```bash
+python -m rag.smoke_test "What is SEV-1?" --compare          # includes hybrid vs hybrid+rerank
+python -m rag.answer "What is SEV-1?"                        # rerank on by default
+python -m rag.answer "What is SEV-1?" --no-rerank            # A/B without rerank
 ```
 
 Qdrant dashboard: http://localhost:6333/dashboard
@@ -70,14 +82,16 @@ Qdrant dashboard: http://localhost:6333/dashboard
 
 ```text
 data/acme/           # source markdown corpus
+docs/RERANKER.md     # why local cross-encoder vs Cohere/Voyage
 rag/ingest.py        # chunk + embed + upsert + BM25 corpus
 rag/bm25_index.py    # sparse keyword index
 rag/fusion.py        # Reciprocal Rank Fusion
-rag/retrieve.py      # dense / bm25 / hybrid
+rag/rerank.py        # local cross-encoder
+rag/retrieve.py      # dense / bm25 / hybrid / +rerank
 rag/smoke_test.py    # retrieval check (+ --compare)
 rag/answer.py        # retrieve → LLM → citations
 rag/types.py         # RetrievedChunk
-rag/config.py        # Qdrant URL, models, RRF_K
+rag/config.py        # models, RRF_K, RERANK_*
 docker-compose.yml   # Qdrant server
 ```
 

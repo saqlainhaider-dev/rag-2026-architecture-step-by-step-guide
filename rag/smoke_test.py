@@ -1,5 +1,5 @@
 """
-Retrieval smoke test — dense / BM25 / hybrid (RRF), with optional side-by-side compare.
+Retrieval smoke test — dense / BM25 / hybrid, optional local rerank compare.
 """
 
 from __future__ import annotations
@@ -8,8 +8,14 @@ import argparse
 
 from dotenv import load_dotenv
 
-from rag.config import DEFAULT_RETRIEVAL_MODE
-from rag.retrieve import RetrievalMode, retrieve, retrieve_bm25, retrieve_dense, retrieve_hybrid
+from rag.config import DEFAULT_RERANK, DEFAULT_RETRIEVAL_MODE
+from rag.retrieve import (
+    RetrievalMode,
+    retrieve,
+    retrieve_bm25,
+    retrieve_dense,
+    retrieve_hybrid,
+)
 
 load_dotenv()
 
@@ -43,7 +49,13 @@ def main() -> None:
     parser.add_argument(
         "--compare",
         action="store_true",
-        help="Print dense vs BM25 vs hybrid side by side",
+        help="Print dense vs BM25 vs hybrid vs hybrid+rerank",
+    )
+    parser.add_argument(
+        "--rerank",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_RERANK,
+        help="Apply local cross-encoder rerank (default: on). See docs/RERANKER.md",
     )
     args = parser.parse_args()
 
@@ -52,12 +64,17 @@ def main() -> None:
     if args.compare:
         _print_chunks("Dense:", retrieve_dense(args.query, k=args.k))
         _print_chunks("BM25:", retrieve_bm25(args.query, k=args.k))
-        _print_chunks("Hybrid (RRF):", retrieve_hybrid(args.query, k=args.k))
+        _print_chunks("Hybrid (RRF):", retrieve_hybrid(args.query, k=args.k, rerank=False))
+        _print_chunks(
+            "Hybrid + local rerank:",
+            retrieve_hybrid(args.query, k=args.k, rerank=True),
+        )
         return
 
     mode: RetrievalMode = args.mode  # type: ignore[assignment]
-    chunks = retrieve(args.query, k=args.k, mode=mode)
-    _print_chunks(f"{mode}:", chunks)
+    chunks = retrieve(args.query, k=args.k, mode=mode, rerank=args.rerank)
+    label = f"{mode}" + (" + rerank" if args.rerank else "")
+    _print_chunks(f"{label}:", chunks)
 
 
 if __name__ == "__main__":

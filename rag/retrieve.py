@@ -1,5 +1,5 @@
 """
-Retrieval: dense (Qdrant), sparse (BM25), and hybrid via RRF fusion.
+Retrieval: dense (Qdrant), sparse (BM25), hybrid RRF, optional local rerank.
 """
 
 from __future__ import annotations
@@ -9,13 +9,19 @@ from typing import Literal
 from langchain_openai import OpenAIEmbeddings
 
 from rag.bm25_index import search_bm25
-from rag.config import COLLECTION_NAME, EMBEDDING_MODEL, get_qdrant_client
+from rag.config import (
+    COLLECTION_NAME,
+    DEFAULT_RERANK,
+    EMBEDDING_MODEL,
+    RERANK_CANDIDATES,
+    get_qdrant_client,
+)
 from rag.fusion import reciprocal_rank_fusion
+from rag.rerank import rerank_chunks
 from rag.types import RetrievedChunk
 
 RetrievalMode = Literal["dense", "bm25", "hybrid"]
 
-# Re-export for existing imports: `from rag.retrieve import RetrievedChunk`
 __all__ = [
     "RetrievedChunk",
     "RetrievalMode",
@@ -80,25 +86,44 @@ def retrieve_bm25(query: str, k: int = 5) -> list[RetrievedChunk]:
     ]
 
 
-def retrieve_hybrid(query: str, k: int = 3, candidate_k: int = 5) -> list[RetrievedChunk]:
+def retrieve_hybrid(
+    query: str,
+    k: int = 3,
+    candidate_k: int = 5,
+    *,
+    rerank: bool = False,
+    rerank_candidates: int = RERANK_CANDIDATES,
+) -> list[RetrievedChunk]:
     """
-    Dense + BM25, fused with RRF, then truncated to k.
+    Dense + BM25 → RRF. Optionally expand the fused shortlist and rerank.
 
-    candidate_k is how many each retriever contributes before fusion.
+    When rerank=True we fuse `rerank_candidates` chunks, then keep top `k`
+    after the local cross-encoder (see docs/RERANKER.md).
     """
-    dense = retrieve_dense(query, k=candidate_k)
-    sparse = retrieve_bm25(query, k=candidate_k)
-    return reciprocal_rank_fusion([dense, sparse], limit=k)
+    pool = rerank_candidates if rerank else k
+    # Each retriever should contribute enough for a useful fused pool
+    per_retriever = max(candidate_k, pool)
+    dense = retrieve_dense(query, k=per_retriever)
+    sparse = retrieve_bm25(query, k=per_retriever)
+    fused = reciprocal_rank_fusion([dense, sparse], limit=pool)
+    if rerank:
+        return rerank_chunks(query, fused, top_n=k)
+    return fused
 
 
 def retrieve(
     query: str,
     k: int = 3,
     mode: RetrievalMode = "hybrid",
+    *,
+    rerank: bool | None = None,
 ) -> list[RetrievedChunk]:
     """Public entrypoint used by smoke_test and answer."""
+    use_rerank = DEFAULT_RERANK if rerank is None else rerank
     if mode == "dense":
-        return retrieve_dense(query, k=k)
+        chunks = retrieve_dense(query, k=max(k, RERANK_CANDIDATES) if use_rerank else k)
+        return rerank_chunks(query, chunks, top_n=k) if use_rerank else chunks[:k]
     if mode == "bm25":
-        return retrieve_bm25(query, k=k)
-    return retrieve_hybrid(query, k=k)
+        chunks = retrieve_bm25(query, k=max(k, RERANK_CANDIDATES) if use_rerank else k)
+        return rerank_chunks(query, chunks, top_n=k) if use_rerank else chunks[:k]
+    return retrieve_hybrid(query, k=k, rerank=use_rerank)

@@ -9,7 +9,7 @@ import argparse
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-from rag.config import CHAT_MODEL, DEFAULT_RETRIEVAL_MODE
+from rag.config import CHAT_MODEL, DEFAULT_RERANK, DEFAULT_RETRIEVAL_MODE
 from rag.retrieve import RetrievedChunk, RetrievalMode, retrieve
 
 load_dotenv()
@@ -46,8 +46,10 @@ def answer_question(
     question: str,
     k: int = 3,
     mode: RetrievalMode = "hybrid",
+    *,
+    rerank: bool | None = None,
 ) -> tuple[str, list[RetrievedChunk]]:
-    chunks = retrieve(question, k=k, mode=mode)
+    chunks = retrieve(question, k=k, mode=mode, rerank=rerank)
     if not chunks:
         return "I don't know — no documents were retrieved.", []
 
@@ -75,13 +77,21 @@ def main() -> None:
         default=DEFAULT_RETRIEVAL_MODE,
         help="Retrieval mode (default: hybrid)",
     )
+    parser.add_argument(
+        "--rerank",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_RERANK,
+        help="Local cross-encoder rerank (default: on). See docs/RERANKER.md",
+    )
     args = parser.parse_args()
 
     mode: RetrievalMode = args.mode  # type: ignore[assignment]
-    text, chunks = answer_question(args.question, k=args.k, mode=mode)
+    text, chunks = answer_question(
+        args.question, k=args.k, mode=mode, rerank=args.rerank
+    )
 
     print(f"Question: {args.question}")
-    print(f"Mode: {mode}\n")
+    print(f"Mode: {mode}  rerank={args.rerank}\n")
     print("Retrieved:")
     for i, chunk in enumerate(chunks, start=1):
         print(f"  [{i}] score={chunk.score:.4f}  {chunk.citation}")

@@ -19,6 +19,12 @@ BM25_CORPUS_PATH = ROOT / "indexes" / "bm25_corpus.json"
 RRF_K = 60  # standard RRF constant; dampens top-rank dominance a bit
 DEFAULT_RETRIEVAL_MODE = "hybrid"
 
+# Step 4 — local cross-encoder rerank (see docs/RERANKER.md)
+RERANK_MODEL = "BAAI/bge-reranker-base"
+RERANK_CANDIDATES = 10  # fuse this many, then rerank down to final k
+RERANK_BATCH_SIZE = 8
+DEFAULT_RERANK = True
+
 
 def get_qdrant_client() -> QdrantClient:
     """Connect to Qdrant running in Docker (see docker-compose.yml)."""
