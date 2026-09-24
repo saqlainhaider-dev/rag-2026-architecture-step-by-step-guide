@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1540" viewBox="0 0 1600 1540" role="img"><title>Production-shaped RAG architecture</title><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#56E0CB"/></marker></defs><rect width="100%" height="100%" fill="#0B1220"/>
+<text x="60" y="64" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700">RAG 2026 / IMPLEMENTATION MAP</text>
+<text x="60" y="118" fill="#F2F6FC" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="700">From documents to grounded answers</text>
+<text x="60" y="158" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="400">Acme knowledge base · Python CLI · Default answer path with optional features noted</text>
+<text x="60" y="220" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">01  INGESTION &amp; STORES</text>
+<rect x="60" y="248" width="295" height="130" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="80" y="282" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Markdown documents</text>
+<text x="80" y="313" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Refund policy · Product FAQ</text>
+<text x="80" y="338" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">On-call runbook + metadata</text>
+<rect x="415" y="248" width="420" height="130" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="435" y="282" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Section-aware child chunks</text>
+<text x="435" y="313" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Split at headings, then 220 chars</text>
+<text x="435" y="338" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">40-char overlap · source + access tags</text>
+<polyline points="355,313 415,313" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="920" y="208" width="620" height="86" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="940" y="242" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Qdrant / dense index</text>
+<text x="940" y="273" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">text-embedding-3-small · 1,536 dimensions</text>
+<rect x="920" y="312" width="620" height="86" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="940" y="346" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">BM25 / local corpus</text>
+<text x="940" y="377" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Same child chunks · indexes/bm25_corpus.json</text>
+<rect x="920" y="416" width="620" height="86" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="940" y="450" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Parent section store</text>
+<text x="940" y="481" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Full sections · indexes/parents.json</text>
+<polyline points="835,313 872,313 872,251 920,251" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="835,313 872,313 872,355 920,355" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="835,313 872,313 872,459 920,459" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="60" y="549" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">02  ONLINE ANSWER PATH</text>
+<rect x="60" y="579" width="320" height="125" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="80" y="613" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Question + caller role</text>
+<text x="80" y="644" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">public / internal (simulated)</text>
+<text x="80" y="669" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Heuristic injection scan: flags</text>
+<rect x="440" y="579" width="520" height="125" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="460" y="613" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Query orchestration</text>
+<text x="460" y="644" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Classify · rewrite · route · light decompose</text>
+<text x="460" y="669" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Effective ACL: caller role overrides routing</text>
+<rect x="1100" y="579" width="440" height="125" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="1120" y="613" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Small-talk response</text>
+<text x="1120" y="644" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">No retrieval when plan says skip</text>
+<text x="1120" y="669" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Chat model → return</text>
+<polyline points="380,641 440,641" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="960,620 1100,620" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="978" y="604" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="400">skip</text>
+<rect x="440" y="761" width="520" height="120" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="460" y="795" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Hybrid retrieval + RRF</text>
+<text x="460" y="826" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Qdrant dense + BM25, access-filtered</text>
+<text x="460" y="851" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Multiple queries: an additional RRF merge</text>
+<polyline points="700,704 700,761" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="715" y="739" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="400">retrieve</text>
+<text x="1010" y="804" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Reads Qdrant + BM25 stores above</text>
+<polyline points="1010,826 960,826" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)" stroke-dasharray="7 6"/>
+<rect x="440" y="926" width="520" height="112" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="460" y="960" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Local reranking + chunk ACL</text>
+<text x="460" y="991" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">bge-reranker-base → top k (default 3)</text>
+<text x="460" y="1016" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Post-retrieval role filter; rerank can be disabled</text>
+<polyline points="700,881 700,926" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="440" y="1083" width="520" height="138" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="460" y="1117" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Context engineering + context ACL</text>
+<text x="460" y="1148" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Expand children to unique parent sections</text>
+<text x="460" y="1173" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">3,500-character budget · role check</text>
+<text x="460" y="1198" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Optional extractive compression (default off)</text>
+<polyline points="700,1038 700,1083" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="1010" y="1125" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Reads parent section store above</text>
+<polyline points="1010,1145 960,1145" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)" stroke-dasharray="7 6"/>
+<rect x="60" y="1280" width="420" height="115" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="80" y="1314" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Guarded prompt + generation</text>
+<text x="80" y="1345" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Delimited context treated as untrusted data</text>
+<text x="80" y="1370" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">gpt-4o-mini · inline citation instructions</text>
+<rect x="540" y="1280" width="480" height="115" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="560" y="1314" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Lightweight grounding check</text>
+<text x="560" y="1345" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Citation presence + lexical overlap / abstain</text>
+<text x="560" y="1370" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Failure → refusal; pass → answer + sources</text>
+<rect x="1080" y="1280" width="460" height="115" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="1100" y="1314" fill="#56E0CB" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Answer / abstention</text>
+<text x="1100" y="1345" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Empty retrieval or permitted context</text>
+<text x="1100" y="1370" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">also returns an early “I don’t know”</text>
+<polyline points="700,1221 700,1248 270,1248 270,1280" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="480,1335 540,1335" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="1020,1335 1080,1335" fill="none" stroke="#56E0CB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="60" y="761" width="320" height="460" rx="16" fill="#121F31" stroke="#344861"/>
+<text x="82" y="805" fill="#85B9FF" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700">03  MEASURE &amp; INSPECT</text>
+<text x="82" y="850" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Golden regression cases</text>
+<text x="82" y="884" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">rag.eval → answer_question</text>
+<text x="82" y="918" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Document / section checks</text>
+<text x="82" y="952" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Answer / abstention checks</text>
+<text x="82" y="986" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400"></text>
+<text x="82" y="1020" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Request traces (JSONL)</text>
+<text x="82" y="1054" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Stage timings · retrieval IDs</text>
+<text x="82" y="1088" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Context · flags · errors</text>
+<text x="82" y="1122" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400">Approximate cost proxy</text>
+<text x="60" y="1451" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="400">Teaching implementation: simulated roles; heuristic guardrails; cost estimates are proxies.</text>
+<text x="60" y="1487" fill="#B0C0D4" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="400">Diagram shows logical flow, not concurrent execution. Feature flags support comparisons.</text>
+</svg>

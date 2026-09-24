@@ -2,6 +2,16 @@
 
 Build a production-shaped RAG system one layer at a time. Each git commit is one step.
 
+## Architecture
+
+![Implementation map showing ingestion into Qdrant, BM25 and parent stores; query orchestration before retrieval, fusion, reranking, context packing, guarded generation and a grounding check; evaluation and tracing alongside the pipeline.](docs/assets/rag-architecture.svg)
+
+[Open full-size PNG](docs/assets/rag-architecture.png)
+
+The diagram follows the default answer path in `rag/answer.py`. Ingestion builds three stores; orchestration runs **before** retrieval. Access checks occur during retrieval and again on retrieved chunks and context blocks. Evaluation invokes the answer pipeline, while JSONL traces record request stages.
+
+This is a teaching implementation: caller roles are simulated, the context budget is character-based, grounding is a citation/lexical-overlap heuristic, and cost figures are approximate proxies. Feature flags support comparisons with individual layers disabled.
+
 **How we work:** [docs/WORKFLOW.md](docs/WORKFLOW.md) — explain → confirm → implement → test → study guide → commit + push.
 
 **Reranker choice:** [docs/RERANKER.md](docs/RERANKER.md) — local cross-encoder (no Cohere/Voyage key required).
